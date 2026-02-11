@@ -218,7 +218,7 @@ export default function AudioPanel({ onAudioReady, disabled }: AudioPanelProps) 
 
       {/* Sub-tabs */}
       <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--bg-tertiary)" }}>
-        {(["record", "upload", "samples"] as SubTab[]).map((tab) => (
+        {(["record", "upload"] as SubTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setSubTab(tab)}
@@ -406,32 +406,7 @@ export default function AudioPanel({ onAudioReady, disabled }: AudioPanelProps) 
           </div>
         )}
 
-        {/* ─── SAMPLES ─── */}
-        {subTab === "samples" && (
-          <div className="space-y-2 animate-fade-in">
-            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              Pre-recorded English samples (placeholder — connect your own URLs):
-            </p>
-            {SAMPLE_AUDIOS.map((s) => (
-              <button
-                key={s.id}
-                disabled={disabled || !s.url}
-                className="w-full flex items-center gap-3 rounded-xl p-3 text-left transition-all duration-200 disabled:opacity-40"
-                style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "rgba(var(--accent-blue), 0.1)" }}>
-                  <svg className="h-4 w-4" style={{ color: "rgb(var(--accent-blue))" }} fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{s.label}</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{s.desc}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+        
       </div>
 
       {/* ─── Waveform & Metrics ─── */}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Whisper Demo (English) — Speech-to-Text & TTS",
+  title: "Whisper Demo — Speech-to-Text & TTS",
   description:
     "Premium demo showcasing Whisper for English speech-to-text transcription with browser-based text-to-speech playback. Built by IIT Sfax students.",
 };

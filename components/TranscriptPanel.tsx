@@ -281,15 +281,9 @@ export default function TranscriptPanel({
 
           {/* Edit tools */}
           <div className="flex flex-wrap gap-1.5">
-            <button onClick={autoPunctuate} className="btn-secondary !text-[10px] !px-2.5 !py-1">Auto Punctuation</button>
-            <button onClick={cleanSpacing} className="btn-secondary !text-[10px] !px-2.5 !py-1">Clean Spacing</button>
-            <button
-              onClick={() => setShowDiff(!showDiff)}
-              className={`btn-secondary !text-[10px] !px-2.5 !py-1 ${showDiff ? "!border-purple-400/40" : ""}`}
-              style={showDiff ? { background: "rgba(var(--accent), 0.08)", color: "rgb(var(--accent))" } : {}}
-            >
-              {showDiff ? "Hide Diff" : "Diff View"}
-            </button>
+
+
+
           </div>
 
           {/* Diff */}

@@ -158,7 +158,7 @@ export default function Home() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ background: "rgb(var(--accent))" }} />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "rgb(var(--accent))" }} />
               </span>
-              Powered by Whisper
+              Powered by IIT Students
             </span>
           </div>
 

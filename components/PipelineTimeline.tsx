@@ -14,7 +14,7 @@ export default function PipelineTimeline({ currentStep = "idle" }: PipelineTimel
   const steps = [
     {
       id: "stt",
-      label: "STT (English)",
+      label: "STT ",
       icon: (
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" fill="currentColor" opacity={0.2} />

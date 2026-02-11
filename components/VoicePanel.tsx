@@ -2,11 +2,17 @@
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
 
+type VoiceMode = "natural" | "browser";
+
 interface VoicePanelProps {
   text: string;
 }
 
 export default function VoicePanel({ text }: VoicePanelProps) {
+  // Mode
+  const [mode, setMode] = useState<VoiceMode>("natural");
+
+  // Browser TTS state
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>("");
   const [rate, setRate] = useState(1);
@@ -14,9 +20,17 @@ export default function VoicePanel({ text }: VoicePanelProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [ttsSupported, setTtsSupported] = useState(true);
+
+  // Natural AI TTS state
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [naturalAudioUrl, setNaturalAudioUrl] = useState<string | null>(null);
+  const [naturalError, setNaturalError] = useState<string | null>(null);
+  const naturalAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [isNaturalPlaying, setIsNaturalPlaying] = useState(false);
+
   const eqRef = useRef<HTMLDivElement>(null);
 
-  // Load voices
+  // Load browser voices
   useEffect(() => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       setTtsSupported(false);
@@ -35,14 +49,82 @@ export default function VoicePanel({ text }: VoicePanelProps) {
 
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
-
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handlePlay = useCallback(() => {
+  // Cleanup natural audio URL on unmount
+  useEffect(() => {
+    return () => {
+      if (naturalAudioUrl) URL.revokeObjectURL(naturalAudioUrl);
+    };
+  }, [naturalAudioUrl]);
+
+  // Clear generated audio when text changes
+  useEffect(() => {
+    if (naturalAudioUrl) {
+      URL.revokeObjectURL(naturalAudioUrl);
+      setNaturalAudioUrl(null);
+    }
+    setNaturalError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  // ─── Natural Voice (AI) ───────────────────────────────
+  const handleNaturalPlay = useCallback(async () => {
+    if (!text) return;
+
+    // If we already have audio, just play it
+    if (naturalAudioUrl && naturalAudioRef.current) {
+      naturalAudioRef.current.currentTime = 0;
+      naturalAudioRef.current.play();
+      return;
+    }
+
+    setIsGenerating(true);
+    setNaturalError(null);
+
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "TTS generation failed");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setNaturalAudioUrl(url);
+
+      // Play immediately
+      const audio = new Audio(url);
+      naturalAudioRef.current = audio;
+      audio.onplay = () => setIsNaturalPlaying(true);
+      audio.onended = () => setIsNaturalPlaying(false);
+      audio.onpause = () => setIsNaturalPlaying(false);
+      audio.onerror = () => { setIsNaturalPlaying(false); setNaturalError("Audio playback failed"); };
+      audio.play();
+    } catch (err) {
+      setNaturalError(err instanceof Error ? err.message : "Failed to generate voice");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [text, naturalAudioUrl]);
+
+  const handleNaturalStop = useCallback(() => {
+    if (naturalAudioRef.current) {
+      naturalAudioRef.current.pause();
+      naturalAudioRef.current.currentTime = 0;
+    }
+    setIsNaturalPlaying(false);
+  }, []);
+
+  // ─── Browser Voice ────────────────────────────────────
+  const handleBrowserPlay = useCallback(() => {
     if (!ttsSupported || !text) return;
 
     if (isPaused) {
@@ -75,15 +157,22 @@ export default function VoicePanel({ text }: VoicePanelProps) {
     setIsSpeaking(false);
   }, []);
 
-  const handleStop = useCallback(() => {
+  const handleBrowserStop = useCallback(() => {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
     setIsPaused(false);
   }, []);
 
-  // Estimated speaking duration (avg 150 words/min adjusted by rate)
+  // Stop everything when switching modes
+  const switchMode = useCallback((newMode: VoiceMode) => {
+    handleBrowserStop();
+    handleNaturalStop();
+    setMode(newMode);
+  }, [handleBrowserStop, handleNaturalStop]);
+
   const wordCount = text ? text.split(/\s+/).filter(Boolean).length : 0;
   const estimatedSec = wordCount > 0 ? Math.round((wordCount / (150 * rate)) * 60) : 0;
+  const isAnySpeaking = isSpeaking || isNaturalPlaying;
 
   return (
     <div className="panel-card p-5 space-y-4 h-full flex flex-col">
@@ -97,149 +186,122 @@ export default function VoicePanel({ text }: VoicePanelProps) {
         <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Voice (TTS)</h2>
       </div>
 
-      {!ttsSupported ? (
-        <div className="rounded-xl p-3 text-xs" style={{ background: "rgba(245, 158, 11, 0.08)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.15)" }}>
-          Text-to-Speech not supported in this browser. Try Chrome or Edge.
-        </div>
-      ) : (
+      
+      
+
+
+
+      {/* ─── Browser Mode ────────────────────────────── */}
+      {mode === "browser" && (
         <>
-          {/* Voice selector */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              English Voice
-            </label>
-            <select
-              value={selectedVoiceUri}
-              onChange={(e) => setSelectedVoiceUri(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2"
-              style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
-            >
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang}){v.localService ? " — Local" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Rate slider */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                Rate
-              </label>
-              <span className="text-[10px] font-mono font-bold" style={{ color: "var(--text-secondary)" }}>
-                {rate.toFixed(1)}×
-              </span>
+          {!ttsSupported ? (
+            <div className="rounded-xl p-3 text-xs" style={{ background: "rgba(245, 158, 11, 0.08)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.15)" }}>
+              Text-to-Speech not supported in this browser. Try Chrome or Edge.
             </div>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={rate}
-              onChange={(e) => setRate(parseFloat(e.target.value))}
-              aria-label="Speech rate"
-            />
-          </div>
+          ) : (
+            <>
+              {/* Voice selector */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                  Browser Voice
+                </label>
+                <select
+                  value={selectedVoiceUri}
+                  onChange={(e) => setSelectedVoiceUri(e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2"
+                  style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+                >
+                  {voices.map((v) => (
+                    <option key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang}){v.localService ? " — Local" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {/* Pitch slider */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                Pitch
-              </label>
-              <span className="text-[10px] font-mono font-bold" style={{ color: "var(--text-secondary)" }}>
-                {pitch.toFixed(1)}
-              </span>
-            </div>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={pitch}
-              onChange={(e) => setPitch(parseFloat(e.target.value))}
-              aria-label="Speech pitch"
-            />
-          </div>
+              {/* Rate slider */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Rate</label>
+                  <span className="text-[10px] font-mono font-bold" style={{ color: "var(--text-secondary)" }}>{rate.toFixed(1)}×</span>
+                </div>
+                <input type="range" min="0.5" max="2" step="0.1" value={rate} onChange={(e) => setRate(parseFloat(e.target.value))} aria-label="Speech rate" />
+              </div>
 
-          {/* Play / Pause / Stop */}
-          <div className="flex gap-2">
-            {!isSpeaking && !isPaused ? (
-              <button
-                onClick={handlePlay}
-                disabled={!text}
-                className="btn-primary flex-1 !text-xs"
-                style={{ background: "linear-gradient(135deg, rgb(34, 197, 94), rgb(16, 185, 129))", boxShadow: "0 4px 16px rgba(34, 197, 94, 0.25)" }}
-              >
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                </svg>
-                Play
-              </button>
-            ) : (
-              <>
-                {isSpeaking ? (
-                  <button onClick={handlePause} className="btn-secondary flex-1 !text-xs">
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    Pause
-                  </button>
-                ) : (
-                  <button onClick={handlePlay} className="btn-primary flex-1 !text-xs" style={{ background: "linear-gradient(135deg, rgb(34, 197, 94), rgb(16, 185, 129))" }}>
+              {/* Pitch slider */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Pitch</label>
+                  <span className="text-[10px] font-mono font-bold" style={{ color: "var(--text-secondary)" }}>{pitch.toFixed(1)}</span>
+                </div>
+                <input type="range" min="0.5" max="2" step="0.1" value={pitch} onChange={(e) => setPitch(parseFloat(e.target.value))} aria-label="Speech pitch" />
+              </div>
+
+              {/* Play / Pause / Stop */}
+              <div className="flex gap-2">
+                {!isSpeaking && !isPaused ? (
+                  <button
+                    onClick={handleBrowserPlay}
+                    disabled={!text}
+                    className="btn-primary flex-1 !text-xs"
+                    style={{ background: "linear-gradient(135deg, rgb(99, 102, 241), rgb(79, 70, 229))", boxShadow: "0 4px 16px rgba(99, 102, 241, 0.25)" }}
+                  >
                     <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                     </svg>
-                    Resume
+                    Play
                   </button>
+                ) : (
+                  <>
+                    {isSpeaking ? (
+                      <button onClick={handlePause} className="btn-secondary flex-1 !text-xs">Pause</button>
+                    ) : (
+                      <button onClick={handleBrowserPlay} className="btn-primary flex-1 !text-xs" style={{ background: "linear-gradient(135deg, rgb(99,102,241), rgb(79,70,229))" }}>Resume</button>
+                    )}
+                    <button onClick={handleBrowserStop} className="btn-secondary !text-xs !px-3">Stop</button>
+                  </>
                 )}
-                <button onClick={handleStop} className="btn-secondary !text-xs !px-3">
-                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-                  </svg>
-                  Stop
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Equalizer animation */}
-          {isSpeaking && (
-            <div ref={eqRef} className="flex items-end justify-center gap-1 h-8 animate-fade-in">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="w-1.5 rounded-full"
-                  style={{
-                    background: "linear-gradient(to top, rgb(34, 197, 94), rgb(16, 185, 129))",
-                    animation: `eq-bar ${0.3 + Math.random() * 0.5}s ease-in-out infinite alternate`,
-                    animationDelay: `${i * 0.05}s`,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    ["--eq-h" as any]: `${8 + Math.random() * 20}px`,
-                    height: "4px",
-                  }}
-                />
-              ))}
-            </div>
+              </div>
+            </>
           )}
-
-          {/* Estimated duration */}
-          <div className="rounded-xl p-3 space-y-1" style={{ background: "var(--bg-tertiary)" }}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              Playback Info
-            </p>
-            <div className="flex items-center justify-between text-xs" style={{ color: "var(--text-secondary)" }}>
-              <span>Words: {wordCount}</span>
-              <span>Est. duration: ~{estimatedSec}s</span>
-            </div>
-          </div>
         </>
       )}
 
+      {/* Equalizer animation (both modes) */}
+      {isAnySpeaking && (
+        <div ref={eqRef} className="flex items-end justify-center gap-1 h-8 animate-fade-in">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={i}
+              className="w-1.5 rounded-full"
+              style={{
+                background: mode === "natural"
+                  ? "linear-gradient(to top, rgb(34, 197, 94), rgb(16, 185, 129))"
+                  : "linear-gradient(to top, rgb(99, 102, 241), rgb(79, 70, 229))",
+                animation: `eq-bar ${0.3 + Math.random() * 0.5}s ease-in-out infinite alternate`,
+                animationDelay: `${i * 0.05}s`,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ["--eq-h" as any]: `${8 + Math.random() * 20}px`,
+                height: "4px",
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Playback Info */}
+      <div className="rounded-xl p-3 space-y-1" style={{ background: "var(--bg-tertiary)" }}>
+        <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          Playback Info
+        </p>
+        <div className="flex items-center justify-between text-xs" style={{ color: "var(--text-secondary)" }}>
+          <span>Words: {wordCount}</span>
+          <span>Est. duration: ~{estimatedSec}s</span>
+        </div>
+      </div>
+
       {/* Empty state */}
-      {!text && ttsSupported && (
+      {!text && (
         <div className="flex-1 flex flex-col items-center justify-center py-4 text-center">
           <div className="rounded-full p-3 mb-2" style={{ background: "var(--bg-tertiary)" }}>
             <svg className="h-5 w-5" style={{ color: "var(--text-muted)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
